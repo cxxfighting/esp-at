@@ -598,7 +598,7 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
     char value[128];
     snprintf(value, 128, "multipart/form-data; boundary=--%s", boundary);
     esp_http_client_set_header(sp_fs_to_http->client, "Content-Type", value);
-
+    esp_http_client_set_header(sp_fs_to_http->client, "recordId", "1");
     // construct http body start and end
     int rlen = 0;
     body_start = calloc(1, 512);
