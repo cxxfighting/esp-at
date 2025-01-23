@@ -21,7 +21,7 @@
 #define AT_HEAP_BUFFER_SIZE         4096
 #define AT_RESP_PREFIX_LEN_MAX      64
 #define AT_FATFS_MOUNT_POINT        "/fatfs"
-
+extern esp_err_t esp_at_http_set_header_if_config(esp_http_client_handle_t client);
 
 typedef struct {
     bool fs_mounted;                /*!< File system mounted */
