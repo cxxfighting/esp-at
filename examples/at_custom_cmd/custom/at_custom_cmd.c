@@ -594,16 +594,16 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
     // esp_http_client_set_header(sp_fs_to_http->client, "Content-Type", "multipart/form-data");
 
     // set new header
-    char *boundary = "--myboundary";
+    const char *boundary = "--myboundaryabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     char value[128];
     snprintf(value, 128, "multipart/form-data; boundary=--%s", boundary);
-    printf("esp_http_client_set_header ready");
+    //printf("esp_http_client_set_header ready\n");
     esp_http_client_set_header(sp_fs_to_http->client, "Content-Type", value);
-    printf("esp_http_client_set_header end");
+    //printf("esp_http_client_set_header end\n");
     //esp_http_client_set_header(sp_fs_to_http->client, "recordId", "1");
-    printf("esp_at_http_set_header_if_config ready");
+    //printf("esp_at_http_set_header_if_config ready\n");
     esp_at_http_set_header_if_config(sp_fs_to_http->client);
-    printf("esp_at_http_set_header_if_config end");
+    //printf("esp_at_http_set_header_if_config end\n");
     // construct http body start and end
     int rlen = 0;
     body_start = calloc(1, 512);
