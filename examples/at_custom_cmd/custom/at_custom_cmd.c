@@ -20,6 +20,7 @@
 #define AT_URL_LEN_MAX              (8 * 1024)
 #define AT_HEAP_BUFFER_SIZE         4096
 #define AT_RESP_PREFIX_LEN_MAX      64
+#define UDP_SEND_MAX_PAYLOAD        300U
 #define AT_FATFS_MOUNT_POINT        "/fatfs"
 extern esp_err_t esp_at_http_set_header_if_config(esp_http_client_handle_t client);
 
@@ -777,12 +778,74 @@ static uint8_t at_exe_cmd_test(uint8_t *cmd_name)
 }
 
 /****************************************************************************************************************************************/
+static esp_at_response_result_t at_setup_cmd_udp_send(uint8_t *para, uint32_t para_len)
+{
+    esp_at_response_result_t result = ESP_AT_RESULT_CODE_OK;
+    uint8_t link_id = 0;
+    uint16_t data_len = 0;
+    uint8_t *hex_buf = NULL;
+    int32_t fd = -1;
+    struct sockaddr_in dest_addr;
+    socklen_t addr_len = sizeof(struct sockaddr_in);
+    int ret;
+    uint8_t raw_data[UDP_SEND_MAX_PAYLOAD];
 
+    esp_at_custom_cmd_para_t params[3] = {0};
+    uint8_t param_cnt = esp_at_custom_cmd_parse_para(para, para_len, params, 3);
+    if (param_cnt != 3) {
+        esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    link_id = (uint8_t)atoi((char *)params[0].para_buf);
+    data_len = (uint16_t)atoi((char *)params[1].para_buf);
+    hex_buf = params[2].para_buf;
+
+    if ((data_len == 0) || (data_len > UDP_SEND_MAX_PAYLOAD)) {
+        esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+    if (strlen((char *)hex_buf) != (size_t)(data_len * 2U)) {
+        esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    fd = esp_at_get_socket_by_link_id(link_id);
+    if (fd < 0) {
+        esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    ret = getpeername(fd, (struct sockaddr *)&dest_addr, &addr_len);
+    if (ret != 0) {
+        esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    for (int i = 0; i < data_len; i++) {
+        char tmp[3] = {0};
+        tmp[0] = hex_buf[i * 2];
+        tmp[1] = hex_buf[i * 2 + 1];
+        raw_data[i] = (uint8_t)strtol(tmp, NULL, 16);
+    }
+
+    ret = sendto(fd, raw_data, data_len, 0, (struct sockaddr *)&dest_addr, addr_len);
+    if (ret > 0) {
+        esp_at_port_write_data((uint8_t *)"OK\r\n", 4);
+        result = ESP_AT_RESULT_CODE_OK;
+    } else {
+        esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
+        result = ESP_AT_RESULT_CODE_ERROR;
+    }
+    return result;
+}
+
+/****************************************************************************************************************************************/
 static const esp_at_cmd_struct at_custom_cmd[] = {
     {"+HTTPGET_TO_FS", NULL, NULL, at_setup_cmd_httpget_to_fs, NULL},
     {"+FS_TO_HTTP_SERVER", NULL, NULL, at_setup_cmd_fs_to_http_server, NULL},
     {"+TEST", at_test_cmd_test, at_query_cmd_test, at_setup_cmd_test, at_exe_cmd_test},
-
+    {"+UDP_SEND", NULL, NULL, at_setup_cmd_udp_send, NULL},
 };
 
 
