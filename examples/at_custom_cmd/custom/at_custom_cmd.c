@@ -601,7 +601,7 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
     esp_at_http_set_header_if_config(sp_fs_to_http->client);
 
     /* construct http body start and end */
-
+    int rlen = 0;
     body_start = calloc(1, 512);
     body_end = calloc(1, 64);
     if (!body_start || !body_end) {
