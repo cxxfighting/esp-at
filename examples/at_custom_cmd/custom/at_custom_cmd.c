@@ -595,28 +595,32 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
     // esp_http_client_set_header(sp_fs_to_http->client, "Content-Type", "multipart/form-data");
 
     // set new header
-    const char *boundary = "--myboundary";
+    const char *boundary = "myboundary";
     char value[128];
-    snprintf(value, 128, "multipart/form-data; boundary=--%s", boundary);
-    //printf("esp_http_client_set_header ready\n");
+    snprintf(value, sizeof(value), "multipart/form-data; boundary=%s", boundary);
     esp_http_client_set_header(sp_fs_to_http->client, "Content-Type", value);
-    //printf("esp_http_client_set_header end\n");
-    //esp_http_client_set_header(sp_fs_to_http->client, "recordId", "1");
-    //printf("esp_at_http_set_header_if_config ready\n");
     esp_at_http_set_header_if_config(sp_fs_to_http->client);
-    //printf("esp_at_http_set_header_if_config end\n");
-    // construct http body start and end
-    int rlen = 0;
+    
+    /* construct http body start and end */
     body_start = calloc(1, 512);
     body_end = calloc(1, 64);
     if (!body_start || !body_end) {
         ret = ESP_ERR_NO_MEM;
         goto cmd_exit;
     }
+    
+    /* start: note the "\r\n\r\n" before file content; each part starts with "--<boundary>" */
     int start_len = snprintf(body_start, 512,
-        "----%s\r\nContent-Disposition: form-data; name=\"username\"\r\n\r\nAlice\r\n----%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\nContent-Type: application/octet-st[...]
-         boundary, boundary, sp_fs_to_http->fs_handle->path);
-    int end_len = snprintf(body_end, 512, "\r\n----%s--\r\n", boundary);
+        "--%s\r\n"
+        "Content-Disposition: form-data; name=\"username\"\r\n\r\n"
+        "Alice\r\n"
+        "--%s\r\n"
+        "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
+        "Content-Type: application/octet-stream\r\n\r\n",
+        boundary, boundary, sp_fs_to_http->fs_handle->path);
+    
+    /* end: trailing boundary with two dashes to indicate end */
+    int end_len = snprintf(body_end, 64, "\r\n--%s--\r\n", boundary);
 
     // establish http connection
     ret = esp_http_client_open(sp_fs_to_http->client, sp_fs_to_http->fs_handle->total_size + start_len + end_len);
