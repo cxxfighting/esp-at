@@ -23,7 +23,7 @@
 #define UDP_SEND_MAX_PAYLOAD        300U
 #define AT_FATFS_MOUNT_POINT        "/fatfs"
 extern esp_err_t esp_at_http_set_header_if_config(esp_http_client_handle_t client);
-
+extern int32_t esp_at_get_socket_by_link_id(uint8_t link_id);
 typedef struct {
     bool fs_mounted;                /*!< File system mounted */
     char *path;                     /*!< File path */
