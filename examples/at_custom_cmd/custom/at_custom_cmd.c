@@ -778,28 +778,35 @@ static uint8_t at_exe_cmd_test(uint8_t *cmd_name)
 }
 
 /****************************************************************************************************************************************/
-static esp_at_response_result_t at_setup_cmd_udp_send(uint8_t *para, uint32_t para_len)
+static uint8_t at_setup_cmd_udp_send(uint8_t para_num)
 {
-    esp_at_response_result_t result = ESP_AT_RESULT_CODE_OK;
+    uint8_t result = ESP_AT_RESULT_CODE_ERROR;
     uint8_t link_id = 0;
     uint16_t data_len = 0;
     uint8_t *hex_buf = NULL;
     int32_t fd = -1;
     struct sockaddr_in dest_addr;
-    socklen_t addr_len = sizeof(struct sockaddr_in);
+    socklen_t addr_len = sizeof(dest_addr);
     int ret;
     uint8_t raw_data[UDP_SEND_MAX_PAYLOAD];
 
-    esp_at_custom_cmd_para_t params[3] = {0};
-    uint8_t param_cnt = esp_at_custom_cmd_parse_para(para, para_len, params, 3);
-    if (param_cnt != 3) {
-        esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
+    int idx = 0;
+    int32_t tmp = 0;
+
+    /* parse parameters using esp‑at API */
+    if (esp_at_get_para_as_digit(idx++, &tmp) != ESP_AT_PARA_PARSE_RESULT_OK) {
         return ESP_AT_RESULT_CODE_ERROR;
     }
+    link_id = (uint8_t)tmp;
 
-    link_id = (uint8_t)atoi((char *)params[0].para_buf);
-    data_len = (uint16_t)atoi((char *)params[1].para_buf);
-    hex_buf = params[2].para_buf;
+    if (esp_at_get_para_as_digit(idx++, &tmp) != ESP_AT_PARA_PARSE_RESULT_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+    data_len = (uint16_t)tmp;
+
+    if (esp_at_get_para_as_str(idx++, &hex_buf) != ESP_AT_PARA_PARSE_RESULT_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
 
     if ((data_len == 0) || (data_len > UDP_SEND_MAX_PAYLOAD)) {
         esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
@@ -810,6 +817,7 @@ static esp_at_response_result_t at_setup_cmd_udp_send(uint8_t *para, uint32_t pa
         return ESP_AT_RESULT_CODE_ERROR;
     }
 
+    /* get socket fd for link id (existing esp‑at helper) */
     fd = esp_at_get_socket_by_link_id(link_id);
     if (fd < 0) {
         esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
@@ -822,11 +830,12 @@ static esp_at_response_result_t at_setup_cmd_udp_send(uint8_t *para, uint32_t pa
         return ESP_AT_RESULT_CODE_ERROR;
     }
 
+    /* convert hex string to raw bytes */
     for (int i = 0; i < data_len; i++) {
-        char tmp[3] = {0};
-        tmp[0] = hex_buf[i * 2];
-        tmp[1] = hex_buf[i * 2 + 1];
-        raw_data[i] = (uint8_t)strtol(tmp, NULL, 16);
+        char tmpbuf[3] = {0};
+        tmpbuf[0] = hex_buf[i * 2];
+        tmpbuf[1] = hex_buf[i * 2 + 1];
+        raw_data[i] = (uint8_t)strtol(tmpbuf, NULL, 16);
     }
 
     ret = sendto(fd, raw_data, data_len, 0, (struct sockaddr *)&dest_addr, addr_len);
@@ -837,6 +846,7 @@ static esp_at_response_result_t at_setup_cmd_udp_send(uint8_t *para, uint32_t pa
         esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
         result = ESP_AT_RESULT_CODE_ERROR;
     }
+
     return result;
 }
 
