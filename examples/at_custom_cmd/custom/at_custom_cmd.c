@@ -1,4 +1,4 @@
-
+ 
 /*
  * SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
  *
@@ -23,7 +23,7 @@
 #define UDP_SEND_MAX_PAYLOAD        300U
 #define AT_FATFS_MOUNT_POINT        "/fatfs"
 extern esp_err_t esp_at_http_set_header_if_config(esp_http_client_handle_t client);
-extern int32_t esp_at_get_socket_by_link_id(uint8_t link_id);
+
 typedef struct {
     bool fs_mounted;                /*!< File system mounted */
     char *path;                     /*!< File path */
@@ -614,7 +614,7 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
         goto cmd_exit;
     }
     int start_len = snprintf(body_start, 512,
-        "----%s\r\nContent-Disposition: form-data; name=\"username\"\r\n\r\nAlice\r\n----%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\nContent-Type: application/octet-stream\r\n\r\n",
+        "----%s\r\nContent-Disposition: form-data; name=\"username\"\r\n\r\nAlice\r\n----%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\nContent-Type: application/octet-st[...]
          boundary, boundary, sp_fs_to_http->fs_handle->path);
     int end_len = snprintf(body_end, 512, "\r\n----%s--\r\n", boundary);
 
@@ -781,7 +781,7 @@ static uint8_t at_exe_cmd_test(uint8_t *cmd_name)
 static uint8_t at_setup_cmd_udp_send(uint8_t para_num)
 {
     uint8_t result = ESP_AT_RESULT_CODE_ERROR;
-    uint8_t  = 0;
+    uint8_t link_id = 0;
     uint16_t data_len = 0;
     uint8_t *hex_buf = NULL;
     int32_t fd = -1;
@@ -797,7 +797,7 @@ static uint8_t at_setup_cmd_udp_send(uint8_t para_num)
     if (esp_at_get_para_as_digit(idx++, &tmp) != ESP_AT_PARA_PARSE_RESULT_OK) {
         return ESP_AT_RESULT_CODE_ERROR;
     }
-     = (uint8_t)tmp;
+    link_id = (uint8_t)tmp;
 
     if (esp_at_get_para_as_digit(idx++, &tmp) != ESP_AT_PARA_PARSE_RESULT_OK) {
         return ESP_AT_RESULT_CODE_ERROR;
@@ -818,7 +818,7 @@ static uint8_t at_setup_cmd_udp_send(uint8_t para_num)
     }
 
     /* get socket fd for link id (existing esp‑at helper) */
-    fd = esp_at_get_socket_by_();
+    fd = esp_at_get_socket_by_link_id(link_id);
     if (fd < 0) {
         esp_at_port_write_data((uint8_t *)"ERROR\r\n", 7);
         return ESP_AT_RESULT_CODE_ERROR;
@@ -865,4 +865,3 @@ bool esp_at_custom_cmd_register(void)
 }
 
 ESP_AT_CMD_SET_INIT_FN(esp_at_custom_cmd_register, 1);
-
