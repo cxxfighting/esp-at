@@ -23,6 +23,8 @@
 #define AT_FATFS_MOUNT_POINT        "/fatfs"
 extern esp_err_t esp_at_http_set_header_if_config(esp_http_client_handle_t client);
 extern int32_t esp_at_get_socket_by_link_id(uint8_t link_id);
+extern esp_at_err_t at_socket_send_data(uint8_t link_id, const uint8_t *data, uint32_t len,
+                                ip_addr_t *remote_ip, uint16_t remote_port);
 typedef struct {
     bool fs_mounted;                /*!< File system mounted */
     char *path;                     /*!< File path */
@@ -823,21 +825,6 @@ static uint8_t at_setup_cmd_udp_send(uint8_t para_num)
         return ESP_AT_RESULT_CODE_ERROR;
     }
 
-    /* get socket fd for link id (existing esp‑at helper) */
-    fd = esp_at_get_socket_by_link_id(link_id);
-    if (fd < 0) {
-        esp_at_port_write_data((uint8_t *)"ERROR2\r\n", 8);
-        ESP_LOGE(TAG_POST, "udp_send fd: %d", fd);
-        return ESP_AT_RESULT_CODE_ERROR;
-    }
-
-    ret = getpeername(fd, (struct sockaddr *)&dest_addr, &addr_len);
-    if (ret != 0) {
-        esp_at_port_write_data((uint8_t *)"ERROR3\r\n", 8);
-        ESP_LOGE(TAG_POST, "udp_send ret: %d", ret);
-        return ESP_AT_RESULT_CODE_ERROR;
-    }
-
     /* convert hex string to raw bytes */
     for (int i = 0; i < data_len; i++) {
         char tmpbuf[3] = {0};
@@ -846,12 +833,15 @@ static uint8_t at_setup_cmd_udp_send(uint8_t para_num)
         raw_data[i] = (uint8_t)strtol(tmpbuf, NULL, 16);
     }
 
-    ret = sendto(fd, raw_data, data_len, 0, (struct sockaddr *)&dest_addr, addr_len);
-    if (ret > 0) {
-        esp_at_port_write_data((uint8_t *)"OK\r\n", 4);
+    esp_at_err_t ret = at_socket_send_data(link_id, raw_data, data_len, NULL, 0);
+    if(ret == ESP_AT_OK)
+    {
+        esp_at_port_write_data((uint8_t *)"OK\r\n",4);
         result = ESP_AT_RESULT_CODE_OK;
-    } else {
-        esp_at_port_write_data((uint8_t *)"ERROR4\r\n", 8);
+    }
+    else
+    {
+        esp_at_port_write_data((uint8_t *)"ERROR\r\n",7);
         ESP_LOGE(TAG_POST, "udp_send ret1: %d", ret);
         result = ESP_AT_RESULT_CODE_ERROR;
     }
