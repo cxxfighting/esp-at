@@ -22,7 +22,7 @@
 #define UDP_SEND_MAX_PAYLOAD        300U
 #define AT_FATFS_MOUNT_POINT        "/fatfs"
 extern esp_err_t esp_at_http_set_header_if_config(esp_http_client_handle_t client);
-
+extern int32_t esp_at_write_data_to_link_id(uint8_t link_id, const void *dataptr, size_t size);
 typedef struct {
     bool fs_mounted;                /*!< File system mounted */
     char *path;                     /*!< File path */
@@ -832,7 +832,8 @@ static uint8_t at_setup_cmd_udp_send(uint8_t para_num)
     }
 
     //ret = at_socket_send_data(link_id, raw_data, data_len, NULL, 0);
-    ret = ESP_OK;
+    ret = esp_at_write_data_to_link_id(link_id, raw_data, data_len);
+    //ret = ESP_OK;
     if(ret == ESP_OK)
     {
         esp_at_port_write_data((uint8_t *)"OK\r\n",4);
