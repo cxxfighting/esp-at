@@ -23,7 +23,7 @@
 #define AT_FATFS_MOUNT_POINT        "/fatfs"
 extern esp_err_t esp_at_http_set_header_if_config(esp_http_client_handle_t client);
 extern int32_t esp_at_get_socket_by_link_id(uint8_t link_id);
-extern esp_at_err_t at_socket_send_data(uint8_t link_id, const uint8_t *data, uint32_t len,
+extern esp_err_t at_socket_send_data(uint8_t link_id, const uint8_t *data, uint32_t len,
                                 ip_addr_t *remote_ip, uint16_t remote_port);
 typedef struct {
     bool fs_mounted;                /*!< File system mounted */
