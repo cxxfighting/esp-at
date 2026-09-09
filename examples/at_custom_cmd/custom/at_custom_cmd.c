@@ -833,8 +833,8 @@ static uint8_t at_setup_cmd_udp_send(uint8_t para_num)
         raw_data[i] = (uint8_t)strtol(tmpbuf, NULL, 16);
     }
 
-    esp_at_err_t ret = at_socket_send_data(link_id, raw_data, data_len, NULL, 0);
-    if(ret == ESP_AT_OK)
+    ret = at_socket_send_data(link_id, raw_data, data_len, NULL, 0);
+    if(ret == ESP_OK)
     {
         esp_at_port_write_data((uint8_t *)"OK\r\n",4);
         result = ESP_AT_RESULT_CODE_OK;
