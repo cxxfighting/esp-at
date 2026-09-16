@@ -782,69 +782,81 @@ static uint8_t at_exe_cmd_test(uint8_t *cmd_name)
 }
 
 /****************************************************************************************************************************************/
+static uint8_t *s_udp_send_buf = NULL;
+static uint32_t s_udp_send_buf_size = 0;
+static SemaphoreHandle_t s_udp_send_sync_sema = NULL;
+
+static void at_udp_send_wait_data_cb(void)
+{
+    xSemaphoreGive(s_udp_send_sync_sema);
+}
+
 static uint8_t at_setup_cmd_udp_send(uint8_t para_num)
 {
-    uint8_t result = ESP_AT_RESULT_CODE_ERROR;
-    uint8_t link_id = 0;
-    uint16_t data_len = 0;
-    uint8_t *hex_buf = NULL;
-    int32_t fd = -1;
-    struct sockaddr_in dest_addr;
-    socklen_t addr_len = sizeof(dest_addr);
-    int ret;
-    uint8_t raw_data[UDP_SEND_MAX_PAYLOAD];
+    int32_t cnt = 0;
+    int32_t link_id = 0;
+    int32_t data_len = 0;
+    int32_t received_len = 0;
+    int32_t remain_len = 0;
+    int32_t ret = 0;
 
-    int idx = 0;
-    int32_t tmp = 0;
-
-    /* parse parameters using esp‑at API */
-    if (esp_at_get_para_as_digit(idx++, &tmp) != ESP_AT_PARA_PARSE_RESULT_OK) {
-        return ESP_AT_RESULT_CODE_ERROR;
-    }
-    link_id = (uint8_t)tmp;
-
-    if (esp_at_get_para_as_digit(idx++, &tmp) != ESP_AT_PARA_PARSE_RESULT_OK) {
-        return ESP_AT_RESULT_CODE_ERROR;
-    }
-    data_len = (uint16_t)tmp;
-
-    if (esp_at_get_para_as_str(idx++, &hex_buf) != ESP_AT_PARA_PARSE_RESULT_OK) {
+    if (esp_at_get_para_as_digit(cnt++, &link_id) != ESP_AT_PARA_PARSE_RESULT_OK) {
         return ESP_AT_RESULT_CODE_ERROR;
     }
 
-    if ((data_len == 0) || (data_len > UDP_SEND_MAX_PAYLOAD)) {
-        esp_at_port_write_data((uint8_t *)"ERROR0\r\n", 8);
+    if (esp_at_get_para_as_digit(cnt++, &data_len) != ESP_AT_PARA_PARSE_RESULT_OK) {
+        return ESP_AT_RESULT_CODE_ERROR;
+    }
+
+    if ((data_len <= 0) || ((uint32_t)data_len > UDP_SEND_MAX_PAYLOAD)) {
         ESP_LOGE(TAG_POST, "udp_send data_len: %d", data_len);
         return ESP_AT_RESULT_CODE_ERROR;
     }
-    if (strlen((char *)hex_buf) != (size_t)(data_len * 2U)) {
-        esp_at_port_write_data((uint8_t *)"ERROR1\r\n", 8);
-        ESP_LOGE(TAG_POST, "udp_send char_len: %d", strlen((char *)hex_buf));
+
+    if (cnt != para_num) {
         return ESP_AT_RESULT_CODE_ERROR;
     }
 
-    /* convert hex string to raw bytes */
-    for (int i = 0; i < data_len; i++) {
-        char tmpbuf[3] = {0};
-        tmpbuf[0] = hex_buf[i * 2];
-        tmpbuf[1] = hex_buf[i * 2 + 1];
-        raw_data[i] = (uint8_t)strtol(tmpbuf, NULL, 16);
+    if ((uint32_t)data_len > s_udp_send_buf_size) {
+        uint8_t *new_buf = (uint8_t *)realloc(s_udp_send_buf, data_len);
+        if (!new_buf) {
+            ESP_LOGE(TAG_POST, "udp_send realloc failed, len: %d", data_len);
+            return ESP_AT_RESULT_CODE_ERROR;
+        }
+        s_udp_send_buf = new_buf;
+        s_udp_send_buf_size = data_len;
     }
 
-    ret = esp_at_write_data_to_link_id(link_id, raw_data, data_len);
-    if(ret == data_len)
-    {
-        esp_at_port_write_data((uint8_t *)"OK\r\n",4);
-        result = ESP_AT_RESULT_CODE_OK;
-    }
-    else
-    {
-        esp_at_port_write_data((uint8_t *)"ERROR\r\n",7);
-        ESP_LOGE(TAG_POST, "udp_send ret: %d", ret);
-        result = ESP_AT_RESULT_CODE_ERROR;
+    if (!s_udp_send_sync_sema) {
+        s_udp_send_sync_sema = xSemaphoreCreateBinary();
+        if (!s_udp_send_sync_sema) {
+            return ESP_AT_RESULT_CODE_ERROR;
+        }
     }
 
-    return result;
+    esp_at_port_enter_specific(at_udp_send_wait_data_cb);
+
+    // uncomment this to let mcu send data to esp32c3
+    //  esp_at_port_write_data((uint8_t *)">", strlen(">"));
+
+    while (xSemaphoreTake(s_udp_send_sync_sema, portMAX_DELAY)) {
+        received_len += esp_at_port_read_data(s_udp_send_buf + received_len, data_len - received_len);
+        if (received_len == data_len) {
+            esp_at_port_exit_specific();
+
+            remain_len = esp_at_port_get_data_length();
+            if (remain_len > 0) {
+                esp_at_port_recv_data_notify(remain_len, portMAX_DELAY);
+            }
+            break;
+        }
+    }
+
+    ret = esp_at_write_data_to_link_id((uint8_t)link_id, s_udp_send_buf, (size_t)data_len);
+    ESP_LOGI(TAG_POST, "udp_send ret: %d", ret);
+
+    /* IGNORE does not finish the command (next AT gets "busy p..."). */
+    return ESP_AT_RESULT_CODE_PROCESS_DONE;
 }
 
 /****************************************************************************************************************************************/
