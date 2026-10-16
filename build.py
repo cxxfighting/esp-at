@@ -326,7 +326,7 @@ def choose_project_config():
     info = {}
     info_lists = get_platform_and_module_lists()
     platform_lists = list(info_lists.keys())
-    module_info_file = os.path.join('build', 'module_info.json')
+    module_info_file = ('build', 'module_info.json')
     if os.path.exists(module_info_file):
         with open(module_info_file, 'r') as f:
             info = json.load(f)
@@ -422,13 +422,13 @@ def setup_env_variables():
     print('sys.platform is {}'.format(sys.platform))
 
     # set IDF_PATH
-    idf_path=os.path.join(os.getcwd(), 'esp-idf')
+    idf_path=(os.getcwd(), 'esp-idf')
     os.environ['IDF_PATH']=idf_path
 
     # get ESP-IDF environment variables
     export_str = ''
     if sys.platform != 'linux2':
-        cmd = '{} {} export --format=key-value'.format(sys.executable, os.path.join('esp-idf', 'tools', 'idf_tools.py'))
+        cmd = '{} {} export --format=key-value'.format(sys.executable, ('esp-idf', 'tools', 'idf_tools.py'))
         try:
             export_str = subprocess.check_output(cmd, shell=True).decode('utf-8')
         except Exception as e:
@@ -444,6 +444,9 @@ def setup_env_variables():
 
     print('PATH is {}'.format(os.environ.get('PATH')))
     print('IDF_PYTHON_ENV_PATH is {}'.format(os.environ.get('IDF_PYTHON_ENV_PATH')))
+    # set AT_CUSTOM_COMPONENTS
+    at_custom_cmd_path=os.path.join(os.getcwd(), 'examples', 'at_custom_cmd')
+    os.environ['AT_CUSTOM_COMPONENTS']=at_custom_cmd_path
 
 def install_compilation_env(target):
     # set up ESP-IDF tools
