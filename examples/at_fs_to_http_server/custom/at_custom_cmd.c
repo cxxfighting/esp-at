@@ -14,6 +14,7 @@
 #include "esp_log.h"
 #include "esp_at.h"
 
+
 #ifndef CONFIG_AT_FS_COMMAND_SUPPORT
 #error "CONFIG_AT_FS_COMMAND_SUPPORT is undefined, please enable it first: python build.py menuconfig > Component config > AT > AT FS command support"
 #endif
@@ -182,13 +183,12 @@ static esp_err_t at_http_event_handler(esp_http_client_event_t *evt)
 
     return ESP_OK;
 }
-
 static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
 {
     esp_err_t ret = ESP_OK;
     int32_t cnt = 0, url_len = 0;
     uint8_t *dst_path = NULL, *data = NULL;
-
+    char *body_start = NULL, *body_end = NULL;
     // dst file path
     if (esp_at_get_para_as_str(cnt++, &dst_path) != ESP_AT_PARA_PARSE_RESULT_OK) {
         return ESP_AT_RESULT_CODE_ERROR;
@@ -196,7 +196,6 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
     if (dst_path == NULL || dst_path[0] == '\0') {
         return ESP_AT_RESULT_CODE_ERROR;
     }
-
     // url len
     if (esp_at_get_para_as_digit(cnt++, &url_len) != ESP_AT_PARA_PARSE_RESULT_OK) {
         return ESP_AT_RESULT_CODE_ERROR;
@@ -204,28 +203,23 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
     if (url_len <= 0 || url_len > AT_URL_LEN_MAX) {
         return ESP_AT_RESULT_CODE_ERROR;
     }
-
     // parameters are ready
     if (cnt != para_num) {
         return ESP_AT_RESULT_CODE_ERROR;
     }
-
     sp_fs_to_http = (at_fs_to_http_server_t *)calloc(1, sizeof(at_fs_to_http_server_t));
     if (!sp_fs_to_http) {
         ret = ESP_ERR_NO_MEM;
         goto cmd_exit;
     }
-
     // init resources
     sp_fs_to_http->fs_handle = at_fs_to_http_begin((char *)dst_path);
     sp_fs_to_http->url = (char *)calloc(1, url_len + 1);
     sp_fs_to_http->sync_sema = xSemaphoreCreateBinary();
-
     if (!sp_fs_to_http->fs_handle || !sp_fs_to_http->url || !sp_fs_to_http->sync_sema) {
         ret = ESP_ERR_NO_MEM;
         goto cmd_exit;
     }
-
     // receive url from AT port
     int32_t had_recv_len = 0;
     esp_at_port_enter_specific(at_custom_wait_data_cb);
@@ -235,7 +229,6 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
         if (had_recv_len == url_len) {
             ESP_AT_LOGI(TAG, "recv %d bytes", had_recv_len);
             esp_at_port_exit_specific();
-
             int32_t remain_len = esp_at_port_get_data_length();
             if (remain_len > 0) {
                 esp_at_port_recv_data_notify(remain_len, portMAX_DELAY);
@@ -244,7 +237,6 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
         }
     }
     ESP_AT_LOGI(TAG, "ready to post %s (size:%d) to %s", sp_fs_to_http->fs_handle->path, sp_fs_to_http->fs_handle->total_size, sp_fs_to_http->url);
-
     // init http client
     esp_http_client_config_t config = {
         .url = (const char*)sp_fs_to_http->url,
@@ -258,15 +250,43 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
         goto cmd_exit;
     }
     esp_http_client_set_method(sp_fs_to_http->client, HTTP_METHOD_POST);
-    esp_http_client_set_header(sp_fs_to_http->client, "Content-Type", "application/octet-stream");
+    // multipart/form-data header，和老代码保持一致
+    const char *boundary = "myboundary";
+    char value[128];
+    snprintf(value, sizeof(value), "multipart/form-data; boundary=%s", boundary);
+    esp_http_client_set_header(sp_fs_to_http->client, "Content-Type", value);
     esp_at_http_set_header_if_config(sp_fs_to_http->client);
 
-    // establish http connection
-    ret = esp_http_client_open(sp_fs_to_http->client, sp_fs_to_http->fs_handle->total_size);
+    /* construct http body start and end */
+    int rlen = 0;
+    body_start = calloc(1, 512);
+    body_end = calloc(1, 64);
+    if (!body_start || !body_end) {
+        ret = ESP_ERR_NO_MEM;
+        goto cmd_exit;
+    }
+    int start_len = snprintf(body_start, 512,
+        "--%s\r\n"
+        "Content-Disposition: form-data; name=\"username\"\r\n\r\n"
+        "Alice\r\n"
+        "--%s\r\n"
+        "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
+        "Content-Type: application/octet-stream\r\n\r\n",
+        boundary, boundary, sp_fs_to_http->fs_handle->path);
+    int end_len = snprintf(body_end, 64, "\r\n--%s--\r\n", boundary);
+
+    // 重点：总长度 = 文件大小 + multipart头部 + multipart尾部
+    ret = esp_http_client_open(sp_fs_to_http->client, sp_fs_to_http->fs_handle->total_size + start_len + end_len);
     if (ret != ESP_OK) {
         goto cmd_exit;
     }
-
+    // 写入multipart表单头部
+    rlen = esp_http_client_write(sp_fs_to_http->client, body_start, start_len);
+    if (rlen != start_len) {
+        ESP_LOGE(TAG, "esp_http_client_write() failed");
+        ret = ESP_FAIL;
+        goto cmd_exit;
+    }
     // post file to remote server
     data = (uint8_t *)malloc(AT_HEAP_BUFFER_SIZE);
     if (!data) {
@@ -298,14 +318,19 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
             break;
         }
     } while (1);
-
+    // 写入multipart表单结束标记
+    rlen = esp_http_client_write(sp_fs_to_http->client, body_end, end_len);
+    if (rlen != end_len) {
+        ESP_LOGE(TAG, "esp_http_client_write() failed");
+        ret = ESP_FAIL;
+        goto cmd_exit;
+    }
     // post over
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "total expected len:%d, but total post size:%d", sp_fs_to_http->fs_handle->total_size, sp_fs_to_http->post_size);
         goto cmd_exit;
     }
     ESP_LOGI(TAG, "total post size matches expected size:%d", sp_fs_to_http->fs_handle->total_size);
-
     // fetch response header
     int header_ret = esp_http_client_fetch_headers(sp_fs_to_http->client);
     if (header_ret < 0) {
@@ -325,10 +350,15 @@ static uint8_t at_setup_cmd_fs_to_http_server(uint8_t para_num)
         ESP_LOGE(TAG, "esp_http_client_perform failed: 0x%x", ret);
         goto cmd_exit;
     }
-
 cmd_exit:
     if (data) {
         free(data);
+    }
+    if (body_start) {
+        free(body_start);
+    }
+    if (body_end) {
+        free(body_end);
     }
     // clean resources
     at_fs_to_http_clean();
@@ -336,9 +366,9 @@ cmd_exit:
         ESP_LOGE(TAG, "command ret: 0x%x", ret);
         return ESP_AT_RESULT_CODE_ERROR;
     }
-
     return ESP_AT_RESULT_CODE_OK;
 }
+
 
 static const esp_at_cmd_t at_custom_cmd[] = {
     {"+FS_TO_HTTP_SERVER", NULL, NULL, at_setup_cmd_fs_to_http_server, NULL},
