@@ -445,15 +445,8 @@ def setup_env_variables():
     print('PATH is {}'.format(os.environ.get('PATH')))
     print('IDF_PYTHON_ENV_PATH is {}'.format(os.environ.get('IDF_PYTHON_ENV_PATH')))
     # set AT_CUSTOM_COMPONENTS
-    # at_custom_cmd_path=os.path.join(os.getcwd(), 'examples', 'at_custom_cmd')
-    # os.environ['AT_CUSTOM_COMPONENTS']=at_custom_cmd_path
-    example_list = [
-        "at_custom_cmd",
-        "at_fs_to_http_server",
-        "at_http_get_to_fs"
-    ]
-    path_list = [os.path.join(os.getcwd(), "examples", name) for name in example_list]
-    os.environ['AT_CUSTOM_COMPONENTS'] = ";".join(path_list)
+    at_custom_cmd_path=os.path.join(os.getcwd(), 'examples', 'at_custom_cmd')
+    os.environ['AT_CUSTOM_COMPONENTS']=at_custom_cmd_path
 
 
 
