@@ -7,7 +7,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include "esp_at.h"
-#include "esp_ble_gatts_api.h"
 
 
 #define BLE_NTFY_MAX_PAYLOAD  100   /* 受BLE MTU限制，实际不要超过MTU‑3 */
