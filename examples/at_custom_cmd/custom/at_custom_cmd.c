@@ -70,7 +70,6 @@ static uint8_t at_exe_cmd_test(uint8_t *cmd_name)
 }
 
 static const esp_at_cmd_t at_custom_cmd[] = {
-    //{"+BLEGATTSNTFYHEX", NULL, NULL, at_setup_cmd_ble_gatts_ntfy_hex, NULL},
     {"+TEST", at_test_cmd_test, at_query_cmd_test, at_setup_cmd_test, at_exe_cmd_test},
     /**
      * @brief You can define your own AT commands here.
